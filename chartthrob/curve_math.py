@@ -241,3 +241,79 @@ def negate_curve(points: Sequence[CurvePoint]) -> List[CurvePoint]:
     function so negation and monotonicity-checking are independently
     testable and callable in either order."""
     return [(x, 255.0 - y) for x, y in points]
+
+
+class CurveBuildError(Exception):
+    """Raised for the failure paths `scanChart()` handled with an `alert()`
+    + early return, once real pixel samples are already in hand: too few
+    valid curve points, or a non-monotonic curve."""
+
+
+@dataclass(frozen=True)
+class CurveBuildResult:
+    curve_points: List[CurvePoint]
+    dynamic_range: DynamicRange
+    paper_color: RGB
+    dark_paper_warning: bool
+    negated: bool
+    curve_name: str
+
+
+def build_curve_from_samples(samples: Sequence[RGB], negate: bool = False) -> CurveBuildResult:
+    """Ports `scanChart()`'s post-sampling orchestration: normalize against
+    the paper-tone patch, compute the dynamic range, walk the 14 evenly-
+    spaced input values building bracketing curve points, verify, and
+    (optionally) negate.
+
+    Extracted out of `chart_analyzer.analyze_chart()` specifically so this
+    orchestration -- everything except the actual pixel sampling and the
+    actual GIMP curve-filter application, both of which need a running
+    GIMP -- is unit-testable on its own with plain Python `RGB` samples.
+    `chart_analyzer.analyze_chart()` calls this with real sampled pixels;
+    `tests/golden/` and `tests/stress/` call it with synthetic ones,
+    exercising the exact same code path either way (see PLAN.md G5).
+    """
+    normalization = normalize_paper_tone(samples)
+    dynamic_range = compute_dynamic_range(normalization.gray_values)
+
+    curve_points: List[CurvePoint] = []
+    for j in range(14):
+        orig_pic_val = float(round_half_up(255.0 * j / 13.0))
+        mapped = find_value_for(orig_pic_val, dynamic_range.normalized)
+        # Faithful to the original's `if (mapToVal >= 0)` guard: a genuine
+        # (if unlikely) negative interpolation result is excluded exactly
+        # like the -1 sentinel is, not just an `is not None` check.
+        if mapped is not None and mapped >= 0:
+            curve_points.append((orig_pic_val, mapped))
+
+    if len(curve_points) < 2:
+        raise CurveBuildError("Not enough samples had valid values to estimate a curve.")
+
+    if not verify_curve(curve_points):  # pragma: no cover
+        # Believed unreachable via this function specifically (though
+        # verify_curve() itself is directly testable and tested -- see
+        # test_verify_curve_quirk_* in tests/unit/test_curve_math.py, and
+        # test_case_10_* in tests/stress/test_stress_cases.py which pins
+        # this exact claim): curve_points' x-values here are always
+        # `round_half_up(255*j/13)` for j in a fixed range(14), filtered
+        # but never reordered, so they're provably strictly increasing
+        # regardless of how corrupted the input samples are. Kept for
+        # defensive fidelity to the original's own `verifyCurve()` call
+        # at this same point in `scanChart()`, not because a real scan can
+        # trigger it.
+        raise CurveBuildError(
+            "Invalid curve values -- is this image really a scanned chart? "
+            "Has it been cropped properly?"
+        )
+
+    final_points = negate_curve(curve_points) if negate else curve_points
+    curve_name = "Negative Curve" if negate else "Print Curve"
+
+    return CurveBuildResult(
+        curve_points=final_points,
+        dynamic_range=dynamic_range,
+        paper_color=normalization.paper_color,
+        dark_paper_warning=normalization.dark_paper_warning,
+        negated=negate,
+        curve_name=curve_name,
+    )

@@ -26,7 +26,8 @@ from typing import Optional
 import gi
 
 gi.require_version("Gimp", "3.0")
-from gi.repository import Gegl, Gimp  # noqa: E402
+gi.require_version("Babl", "0.1")
+from gi.repository import Babl, Gegl, Gimp  # noqa: E402
 
 from . import geometry as geo
 from .geometry import Bounds, ChartLayout
@@ -74,11 +75,48 @@ class ChartOptions:
         self.outlines = outlines
 
 
+_srgb_format_cache = None
+
+
+def _srgb_format() -> Babl.Object:
+    """Lazily resolves the gamma-encoded (non-linear) sRGB Babl format --
+    the apostrophe in "R'G'B'A float" marks it as display-referred, not
+    scene-linear.
+
+    MUST stay lazy, not a module-level constant: `Babl.format()` requires
+    babl to already be initialized, which is only guaranteed once GIMP has
+    started running this plugin (via `Gimp.main()`). Confirmed against real
+    GIMP: computing this at import time crashes with "you must call
+    babl_init first" during GIMP's plugin *query* phase (enumerating this
+    plugin's procedures at startup), which happens in a process context
+    where babl isn't initialized yet -- unlike ad hoc batch-console
+    scripts, which run inside an already-fully-initialized GIMP process
+    and never hit this.
+    """
+    global _srgb_format_cache
+    if _srgb_format_cache is None:
+        _srgb_format_cache = Babl.format("R'G'B'A float")
+    return _srgb_format_cache
+
+
 def _gray_color(value: float) -> Gegl.Color:
-    """A `Gegl.Color` for a 0-255 gray value, fully opaque."""
+    """A `Gegl.Color` for a 0-255 gray value, fully opaque.
+
+    CONFIRMED AGAINST REAL GIMP, NOT ASSUMED: `Gegl.Color.set_rgba()` (no
+    `_with_space`) sets values in *linear light*, not sRGB gamma-encoded --
+    so a naive `set_rgba(128/255, ...)` actually paints as ~188/255 when
+    read back (`Gimp.Drawable.histogram()` reports 8-bit values in the
+    conventional gamma-encoded sense). Every "gray value" in this codebase
+    -- and in the original ChartThrob.jsx, and in the whole premise of a
+    tone-calibration tool -- means the standard sRGB-encoded 0-255
+    convention, so this must go through `set_rgba_with_space()` with the
+    explicit gamma-encoded Babl format instead. Verified empirically: this
+    path gives an exact histogram-mean round-trip (128 in -> 128.00 out);
+    the naive path gave 188.00 out for the same input.
+    """
     v = max(0.0, min(1.0, value / 255.0))
     color = Gegl.Color.new("black")
-    color.set_rgba(v, v, v, 1.0)
+    color.set_rgba_with_space(v, v, v, 1.0, _srgb_format())
     return color
 
 
@@ -184,9 +222,21 @@ def draw_bars(
 
 
 def out_stroke(image: Gimp.Image, layer: Gimp.Layer, layout: ChartLayout) -> None:
-    """Ports `outStroke()`: a 1px black border around the whole chart."""
+    """Ports `outStroke()`: a 1px black border around the whole chart.
+
+    CONFIRMED BUG FOUND AGAINST REAL GIMP: `edit_stroke_selection()` strokes
+    with the *active paint method and brush* by default
+    (`Gimp.StrokeMethod.PAINT_METHOD`), not a plain vector line -- so
+    `context_set_line_width()` alone was silently ignored, and the border
+    came out however wide GIMP's default brush happens to be (observed:
+    about 9px, not 1px), swallowing this patch's own left/top edge in the
+    process. `context_set_stroke_method(Gimp.StrokeMethod.LINE)` must be
+    set first to make `edit_stroke_selection()` honor
+    `context_set_line_width()` as an actual line width.
+    """
     _select(image, Bounds(left=0, right=layout.width, bottom=0, top=layout.height))
     Gimp.context_set_foreground(_gray_color(0.0))
+    Gimp.context_set_stroke_method(Gimp.StrokeMethod.LINE)
     Gimp.context_set_line_width(1.0)
     layer.edit_stroke_selection()
     _deselect(image)
