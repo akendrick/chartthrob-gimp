@@ -68,11 +68,23 @@ BIG_LABEL_POINT_SIZE = CREDIT_POINT_SIZE * 3.0  # top banner label
 class ChartOptions:
     """Ports the two toggles from `userDialog()`'s "build" panel (`gText`,
     `gLines`). `gDPI`/`gChartName`/`gLabel` are handled separately -- DPI via
-    `ChartLayout`, name/label as explicit `build_chart()` parameters."""
+    `ChartLayout`, name/label as explicit `build_chart()` parameters.
 
-    def __init__(self, numbers: bool = False, outlines: bool = True) -> None:
+    `padding_px` has no equivalent in the original: a request from a real
+    user of this port, not a ChartThrob.jsx feature. `0` (default) means no
+    padding -- exactly the original's behavior. A positive value adds a
+    solid white border of that many *literal* pixels around the finished
+    chart, not scaled by DPI -- the user asked for an exact pixel count
+    they control directly, not a physical size that would shift with DPI.
+    The point: after inverting the chart to a negative for printing, this
+    border stays a solid, fully unexposed area, giving contact printers a
+    firm, uniform margin to isolate the print from its support material.
+    """
+
+    def __init__(self, numbers: bool = False, outlines: bool = True, padding_px: float = 0.0) -> None:
         self.numbers = numbers
         self.outlines = outlines
+        self.padding_px = padding_px
 
 
 _srgb_format_cache = None
@@ -360,6 +372,46 @@ def make21(
     return layer
 
 
+def add_padding(image: Gimp.Image, padding_px: float) -> Gimp.Layer:
+    """Adds a solid white border `padding_px` pixels wide around the whole
+    image (a chartthrob-gimp addition, not in the original -- see
+    `ChartOptions.padding_px`'s docstring for why).
+
+    Verified against real GIMP: `Image.resize(new_w, new_h, offx, offy)`
+    repositions existing layers by `(offx, offy)` (confirmed: a layer at
+    the origin ends up with `get_offsets() == (offx, offy)`), so resizing
+    by `padding_px` in each direction and offsetting by `(padding_px,
+    padding_px)` leaves the original content centered with an even margin
+    on every side. The new canvas area `Image.resize()` exposes has no
+    pixel data of its own, so a full-size white layer is inserted *below*
+    the existing (now-offset) content and the whole thing is flattened --
+    confirmed to produce an exact, pixel-precise white border (no bleed
+    or off-by-one at the boundary) rather than resizing the existing
+    layer directly, which would have needed to rely on unverified fill
+    behavior for a non-alpha layer's newly-exposed area.
+    """
+    if padding_px <= 0:
+        return image.get_layers()[0]
+
+    pad = int(round(padding_px))
+    old_width = image.get_width()
+    old_height = image.get_height()
+    new_width = old_width + 2 * pad
+    new_height = old_height + 2 * pad
+
+    image.resize(new_width, new_height, pad, pad)
+
+    bg_layer = Gimp.Layer.new(
+        image, "Padding Background", new_width, new_height,
+        Gimp.ImageType.RGB_IMAGE, 100.0, Gimp.LayerMode.NORMAL,
+    )
+    image.insert_layer(bg_layer, None, len(image.get_layers()))  # bottom of stack
+    Gimp.context_set_foreground(_gray_color(255.0))
+    bg_layer.edit_fill(Gimp.FillType.FOREGROUND)
+
+    return image.flatten()
+
+
 def build_chart(label: str, layout: ChartLayout, options: Optional[ChartOptions] = None) -> Gimp.Image:
     """Ports `buildChart()`. Returns the finished `Gimp.Image`; saving/
     displaying/naming it is a Phase 4 (UI/plugin) concern, not this
@@ -416,5 +468,7 @@ def build_chart(label: str, layout: ChartLayout, options: Optional[ChartOptions]
         0.0, center, BIG_LABEL_POINT_SIZE, y_anchor="bottom",
     )
     layer = image.flatten()
+
+    add_padding(image, options.padding_px)
 
     return image

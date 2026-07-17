@@ -120,7 +120,12 @@ def build_chart_run(procedure, config, data):
 
         GimpUi.init(BUILD_PROC_NAME)
         dialog = GimpUi.ProcedureDialog(procedure=procedure, config=config)
-        dialog.fill(["dpi", "numbers", "outlines", "label"])
+        dialog.fill(["dpi", "numbers", "outlines", "padding", "padding-px", "label"])
+        # "padding-px" only makes sense when "padding" is on -- bound
+        # declaratively rather than managed by hand in this callback, so
+        # it stays correct even if the dialog is reopened with a
+        # different config state.
+        dialog.set_sensitive("padding-px", True, config, "padding", False)
         if not dialog.run():
             dialog.destroy()
             return procedure.new_return_values(Gimp.PDBStatusType.CANCEL, GLib.Error())
@@ -130,9 +135,11 @@ def build_chart_run(procedure, config, data):
     numbers = config.get_property("numbers")
     outlines = config.get_property("outlines")
     label = config.get_property("label")
+    padding = config.get_property("padding")
+    padding_px = config.get_property("padding-px") if padding else 0.0
 
     layout = geo.ChartLayout.from_dpi(dpi)
-    options = cb.ChartOptions(numbers=numbers, outlines=outlines)
+    options = cb.ChartOptions(numbers=numbers, outlines=outlines, padding_px=padding_px)
     image = cb.build_chart(label, layout, options)
 
     # Best-effort: there's no display server to attach a window to when
@@ -223,6 +230,22 @@ class ChartThrobPlugIn(Gimp.PlugIn):
             procedure.add_boolean_argument(
                 "outlines", _("_Outlines"), _("Draw patch border/grid lines"),
                 True, GObject.ParamFlags.READWRITE,
+            )
+            procedure.add_boolean_argument(
+                "padding", _("Add _Padding"),
+                _(
+                    "Add a solid white border around the finished chart. When "
+                    "the chart is later inverted for a digital negative, this "
+                    "border stays a firm, fully unexposed area, giving contact "
+                    "printers a uniform margin to isolate the print from its "
+                    "support material."
+                ),
+                False, GObject.ParamFlags.READWRITE,
+            )
+            procedure.add_double_argument(
+                "padding-px", _("Padding _Size (px)"),
+                _("Width of the padding border, in pixels"),
+                0.0, 10000.0, 40.0, GObject.ParamFlags.READWRITE,
             )
             procedure.add_string_argument(
                 "label", _("_Label"), _("Label printed on the chart"),

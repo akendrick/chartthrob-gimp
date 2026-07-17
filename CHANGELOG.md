@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Padding option** on the Build Chart dialog, requested by a real user
+  of this port -- not in the original ChartThrob.jsx. Off by default
+  (identical behavior to before). When enabled, adds a solid white border
+  of a user-chosen pixel width (default 40px) around the finished chart.
+  When the chart is later inverted for a digital negative, this border
+  stays a firm, fully unexposed area, giving contact printers a uniform
+  margin to isolate the print from its support material. The pixel-width
+  field is only enabled once padding is turned on (`GimpUi.ProcedureDialog
+  .set_sensitive()`, bound declaratively to the padding toggle rather than
+  managed by hand). See `chartthrob.chart_builder.add_padding()` and
+  `docs/API_MAPPING.md`'s Phase 2 section for how the border itself is
+  produced (canvas resize + a full-size white layer behind the existing
+  content, verified against real GIMP rather than assumed).
+
 ### Fixed
 
 - **Chart title overlapped the top row of patches.** Found by a real user
