@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **Chart title overlapped the top row of patches.** Found by a real user
+  running the plugin. `write_text()` positions text layers by their
+  top-left corner (GIMP's native behavior); Photoshop's `textItem.position`
+  is closer to a baseline anchor, where a single line's glyphs mostly
+  extend *upward* from it. That mismatch was invisible for small text
+  (per-patch numbers, the credits block) but became an obvious overlap for
+  the 3x-sized title label sitting just above the grid. Added a
+  `y_anchor="bottom"` option to `write_text()` (reads back the rendered
+  text height and positions so `y` is the bottom of the text, not the
+  top) and applied it to the title label specifically.
+
 ## [0.1.0] — 2026-07-16
 
 Initial GIMP 3 port of ChartThrob. Full technical detail and rationale for

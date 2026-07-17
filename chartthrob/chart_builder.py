@@ -250,14 +250,29 @@ def write_text(
     value: float,
     justification: Gimp.TextJustification = Gimp.TextJustification.LEFT,
     point_size: float = LABEL_POINT_SIZE,
+    y_anchor: str = "top",
 ) -> Gimp.TextLayer:
     """Ports `writeText(x,y,userString,val,just)`.
 
-    Photoshop's `textItem.position` + `justification` together define an
-    *anchor point* (x stays fixed; the text grows left/right/centered from
-    it). GIMP positions text layers by their top-left corner instead, so
-    this renders the layer first, reads back its width, and computes the
-    equivalent offset -- reproducing the same anchor behavior.
+    Photoshop's `textItem.position` + `justification` together define a
+    horizontal *anchor point* (x stays fixed; the text grows left/right/
+    centered from it). GIMP positions text layers by their top-left corner
+    instead, so this renders the layer first, reads back its width, and
+    computes the equivalent x offset -- reproducing the same anchor
+    behavior.
+
+    `y_anchor` handles the same problem vertically. Photoshop's
+    `textItem.position` Y is baseline-ish -- for a single line of text,
+    most of the glyph height extends *upward* from it, not downward -- so
+    a caller wanting "this text sits just above some point, growing
+    upward" (e.g. `buildChart()`'s title label above the patch grid) needs
+    `y_anchor="bottom"`: this renders the layer, reads back its height, and
+    positions it so `y` is the *bottom* of the text rather than GIMP's
+    native top. CONFIRMED BUG FOUND BY A REAL USER: the default (`"top"`)
+    was used unconditionally everywhere originally, including for the
+    chart's title -- which visibly overlapped the first patch row at 3x
+    label size, since the gap above the grid (`gYMarg - dpiScale*20`) was
+    sized for a top-anchored line, not a bottom-anchored one.
     """
     font = _resolve_font()
     layer = Gimp.TextLayer.new(image, text, font, point_size, Gimp.Unit.point())
@@ -271,7 +286,11 @@ def write_text(
         offset_x = x - width / 2.0
     else:
         offset_x = x
-    layer.set_offsets(int(round(offset_x)), int(round(y)))
+    if y_anchor == "bottom":
+        offset_y = y - layer.get_height()
+    else:
+        offset_y = y
+    layer.set_offsets(int(round(offset_x)), int(round(offset_y)))
     return layer
 
 
@@ -394,7 +413,7 @@ def build_chart(label: str, layout: ChartLayout, options: Optional[ChartOptions]
 
     write_text(
         image, layout.x_marg + layout.patch * 5, layout.y_marg - layout.dpi_scale * 20, label,
-        0.0, center, BIG_LABEL_POINT_SIZE,
+        0.0, center, BIG_LABEL_POINT_SIZE, y_anchor="bottom",
     )
     layer = image.flatten()
 
