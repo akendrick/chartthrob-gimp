@@ -525,6 +525,38 @@ suite against real code rather than trusting the original table's guesses:**
 - **Not done, on purpose:** tagging `v0.1.0` (or any git commit) — held for
   an explicit request rather than assumed to be part of "finish Phase 6."
 
+### 3.4 Post-launch feature additions (real user requests, after v0.1.0's scope)
+
+Two features added after the plan's original six phases, both requested by
+the plugin's actual first user rather than sketched in advance — full
+detail in `CHANGELOG.md`'s `[Unreleased]` section and their
+`docs/API_MAPPING.md` rows (marked ➕, a new status added specifically for
+"not in the original, added here").
+
+- **Padding option** (Build Chart dialog): an optional solid white border
+  around the finished chart, so an inverted digital negative gets a firm,
+  fully unexposed margin for isolating a contact print from its support
+  material. Off by default. Verified against real GIMP (canvas resize +
+  layer offset behavior confirmed empirically, not assumed).
+- **Curve file export** (Analyze Scan dialog): optionally also writes the
+  analyzed curve as a real GIMP `.curves` file, loadable via Colors >
+  Curves > Import on any image — closing the cross-session "reuse this
+  curve elsewhere" gap the hidden `DrawableFilter` alone can't solve (see
+  4.1 item 6, which flagged this exact gap before it was requested).
+  Notable in how it was built: the file format came from reverse-
+  engineering a real file the requesting user exported from their own
+  GIMP 3.2.4, not from an initial (wrong-vintage) tutorial reference that
+  was tried first and explicitly discarded once real ground truth was
+  available; `Gimp.Curve.get_sample()` turned out to silently return
+  `0.0` for every input on the `SMOOTH`-type curves this codebase always
+  builds (a C-level assertion failure with no Python exception) rather
+  than the FREE-type curves it's actually documented for, caught by
+  testing before relying on it; and the feature's one unverifiable step
+  from this environment — does GIMP's own Curves dialog actually re-import
+  a file this plugin wrote — was confirmed working by the requesting user
+  directly, both for a hand-crafted test curve and for one produced by the
+  real build → simulate-a-print-distortion → analyze → export path.
+
 ---
 
 ## 4. GIMP Platform Gaps & Ecosystem Opportunities

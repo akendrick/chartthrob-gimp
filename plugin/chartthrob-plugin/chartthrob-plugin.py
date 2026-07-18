@@ -171,7 +171,7 @@ def analyze_scan_run(procedure, run_mode, image, drawables, config, data):
 
         GimpUi.init(ANALYZE_PROC_NAME)
         dialog = GimpUi.ProcedureDialog(procedure=procedure, config=config)
-        dialog.fill(["show-samples", "negate"])
+        dialog.fill(["show-samples", "negate", "curve-file"])
         if not dialog.run():
             dialog.destroy()
             return procedure.new_return_values(Gimp.PDBStatusType.CANCEL, GLib.Error())
@@ -186,6 +186,15 @@ def analyze_scan_run(procedure, run_mode, image, drawables, config, data):
     except ca.ChartAnalysisError as exc:
         Gimp.message(str(exc))
         return procedure.new_return_values(Gimp.PDBStatusType.EXECUTION_ERROR, GLib.Error(str(exc)))
+
+    curve_file = config.get_property("curve-file")
+    if curve_file is not None:
+        try:
+            ca.export_curve_file(result.curve_points, curve_file.get_path())
+        except OSError as exc:
+            Gimp.message(
+                f"The curve filter was applied, but exporting the curve file failed: {exc}"
+            )
 
     Gimp.displays_flush()
     Gimp.message(_report_message(result))
@@ -280,6 +289,17 @@ class ChartThrobPlugIn(Gimp.PlugIn):
                 "negate", _("_Negate Output Curve"),
                 _("Invert the final curve (e.g. for use with QuadToneRIP)"),
                 False, GObject.ParamFlags.READWRITE,
+            )
+            procedure.add_file_argument(
+                "curve-file", _("E_xport Curve File"),
+                _(
+                    "Optional: also save the curve as a GIMP .curves file, "
+                    "loadable via Colors > Curves > Import on any image -- "
+                    "leave unset to skip. Not a Photoshop-style adjustment "
+                    "layer, but a standalone file GIMP's own Curves dialog "
+                    "can load directly."
+                ),
+                Gimp.FileChooserAction.SAVE, True, None, GObject.ParamFlags.READWRITE,
             )
             return procedure
 

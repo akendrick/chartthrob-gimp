@@ -246,7 +246,31 @@ def negate_curve(points: Sequence[CurvePoint]) -> List[CurvePoint]:
 class CurveBuildError(Exception):
     """Raised for the failure paths `scanChart()` handled with an `alert()`
     + early return, once real pixel samples are already in hand: too few
-    valid curve points, or a non-monotonic curve."""
+    valid curve points, or a non-monotonic curve.
+
+    Carries structured diagnostic fields (all optional, `None` when not
+    applicable) beyond the original's bare alert text -- added after a
+    real user hit the "not enough valid points" failure on a real scan
+    and the original's static message gave no way to tell *why* without
+    reading source code. `str(error)` still gives a full human-readable
+    explanation; the fields are for programmatic access (e.g. a future
+    dialog that highlights the specific problem).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        dynamic_range: Optional["DynamicRange"] = None,
+        paper_color: Optional[RGB] = None,
+        dark_paper_warning: bool = False,
+        valid_point_count: Optional[int] = None,
+    ) -> None:
+        super().__init__(message)
+        self.dynamic_range = dynamic_range
+        self.paper_color = paper_color
+        self.dark_paper_warning = dark_paper_warning
+        self.valid_point_count = valid_point_count
 
 
 @dataclass(frozen=True)
@@ -257,6 +281,55 @@ class CurveBuildResult:
     dark_paper_warning: bool
     negated: bool
     curve_name: str
+
+
+def _diagnose_insufficient_points(
+    normalization: PaperNormalizationResult, dynamic_range: DynamicRange, valid_point_count: int
+) -> str:
+    """Builds a human-readable diagnosis for the "not enough valid curve
+    points" failure, covering the real-world causes actually seen in
+    practice. The original's bare `alert()` gave no indication of *which*
+    of these applied -- fine for the clean synthetic scans this failure
+    path was tested against here, unhelpful for a real, possibly
+    mis-cropped or mis-scanned chart, which is exactly the situation a
+    real user hit.
+    """
+    reasons = []
+    if dynamic_range.degenerate:
+        reasons.append(
+            "the scan's tonal range read back nearly flat (all 101 patches "
+            "measured almost identically) -- check that the scan/photo is "
+            "cropped tightly to just the chart's patches (no background or "
+            "table visible around the edges), that the print itself has "
+            "real contrast from white to black, and that the image wasn't "
+            "saved through an auto-levels/auto-contrast step that "
+            "flattened it"
+        )
+    if normalization.dark_paper_warning:
+        paper_rgb = tuple(round(c) for c in normalization.paper_color)
+        reasons.append(
+            f"the paper-tone reference patch (should be the lightest patch, "
+            f"top-left) read as RGB{paper_rgb}, unusually dark for a "
+            f"paper-white reference -- this often means the scan is "
+            f"inverted/negative, or the crop's top-left corner isn't "
+            f"actually the chart's lightest patch"
+        )
+    # Always included, not just a fallback for when neither specific cause
+    # above applies: the raw numbers are useful context regardless, and a
+    # sample set that fails this check while triggering neither of the two
+    # specific causes above is hard to construct at all -- non-degenerate
+    # `compute_dynamic_range` output always contains a sample normalized to
+    # exactly 0 and one to exactly 255 by construction, which in practice
+    # is enough for `find_value_for` to bracket most query points even
+    # against wildly non-monotonic (though non-degenerate) input.
+    reasons.append(
+        f"only {valid_point_count} of 14 curve points could be computed "
+        f"(measured dynamic range: {dynamic_range.min_value:.1f} to "
+        f"{dynamic_range.max_value:.1f} on a 0-255 scale) -- double check "
+        f"the crop matches the original chart's proportions and "
+        f"orientation (10 columns x 11 rows of patches)"
+    )
+    return "Not enough samples had valid values to estimate a curve: " + "; ".join(reasons) + "."
 
 
 def build_curve_from_samples(samples: Sequence[RGB], negate: bool = False) -> CurveBuildResult:
@@ -287,7 +360,13 @@ def build_curve_from_samples(samples: Sequence[RGB], negate: bool = False) -> Cu
             curve_points.append((orig_pic_val, mapped))
 
     if len(curve_points) < 2:
-        raise CurveBuildError("Not enough samples had valid values to estimate a curve.")
+        raise CurveBuildError(
+            _diagnose_insufficient_points(normalization, dynamic_range, len(curve_points)),
+            dynamic_range=dynamic_range,
+            paper_color=normalization.paper_color,
+            dark_paper_warning=normalization.dark_paper_warning,
+            valid_point_count=len(curve_points),
+        )
 
     if not verify_curve(curve_points):  # pragma: no cover
         # Believed unreachable via this function specifically (though

@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **"Not enough samples had valid values to estimate a curve" now explains
+  why.** A real user hit this exact error analyzing a real scan; the
+  message previously gave no way to tell whether the cause was a
+  near-flat measured tonal range (e.g. the crop includes background
+  outside the chart, a low-contrast print, or an auto-levels/auto-contrast
+  step flattened the scan) or an unusually dark paper-tone reading (often
+  an inverted/negative scan, or a crop whose top-left corner isn't
+  actually the chart's lightest patch) without reading source code. The
+  error now names the likely cause(s) directly, plus the raw measured
+  numbers either way.
+
 ### Added
 
 - **Padding option** on the Build Chart dialog, requested by a real user
@@ -17,6 +30,29 @@
   `docs/API_MAPPING.md`'s Phase 2 section for how the border itself is
   produced (canvas resize + a full-size white layer behind the existing
   content, verified against real GIMP rather than assumed).
+
+- **Curve file export** on the Analyze Scan dialog, requested by a real
+  user of this port -- not in the original ChartThrob.jsx, and not
+  exposed anywhere in GIMP's own scripting API (confirmed by querying all
+  1051 registered PDB procedures directly; none save or load a curve).
+  Optional (leave the file field empty to skip, matching prior behavior).
+  When set, writes the analyzed curve as a GIMP-native `.curves` settings
+  file -- loadable via **Colors > Curves > Import/Open** on *any* image,
+  not just through this plugin, closing the "reuse this curve on other
+  images" gap the hidden `DrawableFilter` alone doesn't solve across
+  separate GIMP sessions. The file format was reverse-engineered from a
+  real file a real user exported from their own GIMP 3.2.4 Curves dialog
+  (not guessed from an older, likely-version-mismatched tutorial format),
+  and its 256-entry sample table is generated using GIMP's own curve
+  engine (applying the curve to a synthetic ramp and reading back the
+  result) rather than reimplementing GIMP's spline interpolation in
+  Python. See `chartthrob.chart_analyzer.export_curve_file()` and
+  `docs/API_MAPPING.md`'s Phase 3 section for the full field-by-field
+  format mapping. **Confirmed working end-to-end by a real user**: a file
+  exported through the actual plugin path (build chart, simulate a real
+  print distortion, analyze, export) was imported via GIMP's own Colors >
+  Curves > Import and showed the correctly distorted curve shape -- the
+  one step that couldn't be verified without GUI access.
 
 ### Fixed
 

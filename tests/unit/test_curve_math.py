@@ -242,3 +242,48 @@ def test_negate_curve_applies_255_minus_y():
 def test_negate_curve_is_an_involution():
     points = [(0.0, 10.0), (128.0, 128.0), (255.0, 250.0)]
     assert cm.negate_curve(cm.negate_curve(points)) == points
+
+
+# --- CurveBuildError diagnostics -------------------------------------------
+#
+# Added after a real user hit "Not enough samples had valid values to
+# estimate a curve" on a real scan and the original's bare alert text gave
+# no way to tell why. These pin the diagnostic content, not just that an
+# exception is raised (already covered by tests/stress/test_stress_cases.py).
+
+
+def test_curve_build_error_diagnoses_degenerate_scan():
+    samples = [cm.RGB(150.0, 150.0, 150.0)] * 101
+    with pytest.raises(cm.CurveBuildError) as exc_info:
+        cm.build_curve_from_samples(samples)
+    error = exc_info.value
+    assert error.dynamic_range.degenerate is True
+    assert error.dark_paper_warning is False
+    assert "nearly flat" in str(error)
+    assert "cropped tightly" in str(error)
+
+
+def test_curve_build_error_diagnoses_dark_paper_tone():
+    # Reversed scan: trips both degenerate AND dark_paper_warning, since a
+    # genuinely backwards chart starts dark where it should start light.
+    samples = [cm.RGB(20.0 + i * 2.1, 20.0 + i * 2.1, 20.0 + i * 2.1) for i in range(101)]
+    with pytest.raises(cm.CurveBuildError) as exc_info:
+        cm.build_curve_from_samples(samples)
+    error = exc_info.value
+    assert error.dark_paper_warning is True
+    assert error.paper_color == cm.RGB(20.0, 20.0, 20.0)
+    assert "unusually dark" in str(error)
+    assert "inverted/negative" in str(error)
+
+
+def test_curve_build_error_always_includes_raw_numeric_context():
+    # The raw point-count/dynamic-range numbers are appended unconditionally
+    # (not just when neither specific cause below applies), so a case that
+    # *does* trigger a specific cause should still carry both.
+    samples = [cm.RGB(150.0, 150.0, 150.0)] * 101
+    with pytest.raises(cm.CurveBuildError) as exc_info:
+        cm.build_curve_from_samples(samples)
+    message = str(exc_info.value)
+    assert "of 14 curve points could be computed" in message
+    assert "measured dynamic range:" in message
+    assert exc_info.value.valid_point_count is not None
