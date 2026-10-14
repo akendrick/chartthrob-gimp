@@ -1,6 +1,7 @@
 [project]
 name = "chartthrob-gimp"
-version = "0.1.0"
+version = "0.2.1"
+license = "MIT"
 description = "GIMP port of ChartThrob (originally by Kevin Bjorke) -- a digital-negative calibration chart tool"
 requires-python = ">=3.9"
 

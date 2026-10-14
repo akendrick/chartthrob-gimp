@@ -13,7 +13,9 @@ this feature is opt-in and doesn't change existing behavior).
 """
 import sys
 
-sys.path.insert(0, "/Users/kendrick/Documents/CODE/ChartThrob-GIMP")
+import os
+ROOT = os.environ["CHARTTHROB_ROOT"]  # exported by scripts/run_gimp_batch.sh
+sys.path.insert(0, ROOT)
 
 from chartthrob import chart_builder as cb
 from chartthrob import geometry as geo

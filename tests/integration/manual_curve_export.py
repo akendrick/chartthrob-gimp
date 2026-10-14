@@ -23,8 +23,10 @@ import os
 import re
 import sys
 
-sys.path.insert(0, "/Users/kendrick/Documents/CODE/ChartThrob-GIMP")
-sys.path.insert(0, "/Users/kendrick/Documents/CODE/ChartThrob-GIMP/plugin/chartthrob-plugin")
+import os
+ROOT = os.environ["CHARTTHROB_ROOT"]  # exported by scripts/run_gimp_batch.sh
+sys.path.insert(0, ROOT)
+sys.path.insert(0, ROOT + "/plugin/chartthrob-plugin")
 
 from chartthrob import chart_analyzer as ca
 
@@ -83,7 +85,7 @@ layer = image.get_layers()[0]
 
 spec = importlib.util.spec_from_file_location(
     "chartthrob_plugin",
-    "/Users/kendrick/Documents/CODE/ChartThrob-GIMP/plugin/chartthrob-plugin/chartthrob-plugin.py",
+    ROOT + "/plugin/chartthrob-plugin/chartthrob-plugin.py",
 )
 chartthrob_plugin = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(chartthrob_plugin)

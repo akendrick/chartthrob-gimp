@@ -1,6 +1,25 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.1] — 2026-10-12
+
+- Published at <https://github.com/akendrick/chartthrob-gimp> under the
+  MIT License (the GIMP port's own code; see the README's licensing note).
+- Unit tests run on GitHub Actions for every push.
+
+## [0.2.0] — 2026-09-23
+
+### Distribution
+
+- Release builds are now self-contained: `scripts/build_release.sh` bundles
+  the `chartthrob` package inside the plugin folder, so a plain copy into
+  GIMP's plug-ins directory works (previously the plugin only found its
+  package through a symlink into a full checkout).
+- `scripts/install.sh` installs (or `--link`s, or `--uninstall`s) for macOS
+  and Linux, with `--gimp-version` / `--plugins-dir` overrides.
+- Integration scripts no longer contain machine-specific paths;
+  `scripts/run_gimp_batch.sh` exports `CHARTTHROB_ROOT` and finds the GIMP
+  binary on macOS and Linux (preferring `gimp-console`, since the GUI binary
+  crashes in `-i` mode on recent macOS).
 
 ### Changed
 
@@ -56,6 +75,9 @@
 
 ### Fixed
 
+- **"Outline Sample Areas" showed nothing.** It kept the outlined working
+  copy of the scan but never opened a window for it. It now opens it (best
+  effort; skipped when there's no display, e.g. headless runs).
 - **Chart title overlapped the top row of patches.** Found by a real user
   running the plugin. `write_text()` positions text layers by their
   top-left corner (GIMP's native behavior); Photoshop's `textItem.position`

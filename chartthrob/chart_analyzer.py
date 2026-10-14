@@ -359,7 +359,16 @@ def analyze_chart(image: Gimp.Image, options: Optional[ScanOptions] = None) -> S
                 samples.append(sample_patch(sampler, sampler_layer, i, j, options))
         samples.append(sample_patch(sampler, sampler_layer, 0, 10, options))
     finally:
-        if not options.show_samples:
+        if options.show_samples:
+            # Keeping the outlined working copy is pointless unless the user
+            # can see it. Best-effort: Display.new() raises when there's no
+            # display server (headless/batch), same as the Build Chart path.
+            try:
+                Gimp.Display.new(sampler)
+                Gimp.displays_flush()
+            except TypeError:
+                pass
+        else:
             sampler.delete()
 
     # All the tone-correction math (normalize, dynamic range, curve-point

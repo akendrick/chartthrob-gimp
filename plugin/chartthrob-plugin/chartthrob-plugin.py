@@ -13,21 +13,26 @@ Phase 4 for why that split is more GIMP-idiomatic, not a shortcut):
     replacing the original's manual `app.documents.length<1` check) --
     ports the `scanChart()` half.
 
-Install: symlink (not copy) this *directory* into GIMP's plug-ins folder,
-e.g. on macOS:
-    ln -s /path/to/ChartThrob-GIMP/plugin/chartthrob-plugin \
-          ~/Library/Application\\ Support/GIMP/3.0/plug-ins/chartthrob-plugin
-This file must stay executable (`chmod +x`) and its containing directory
-name must match its own basename -- both are GIMP 3 plugin-discovery
-requirements, not stylistic choices.
+Install: use scripts/install.sh (see README.md). By hand, the plugin must
+live in its own folder inside GIMP's plug-ins directory, the folder name must
+match this file's basename, and this file must be executable -- all GIMP 3
+plugin-discovery requirements, not stylistic choices. A release build ships
+the `chartthrob` package inside that folder; a development checkout is
+installed by symlinking this directory instead.
 """
 import os
 import sys
 
 _PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
+# Release builds bundle the `chartthrob` package right next to this file, so
+# a plain copy into GIMP's plug-ins folder works. A development checkout has
+# it two levels up instead (plugin/chartthrob-plugin/ -> repo root), which
+# is what makes the symlink-install workflow work; check the bundled copy
+# first and fall back to that.
 _REPO_ROOT = os.path.normpath(os.path.join(_PLUGIN_DIR, "..", ".."))
-if _REPO_ROOT not in sys.path:
-    sys.path.insert(0, _REPO_ROOT)
+for _candidate in (_REPO_ROOT, _PLUGIN_DIR):  # later insert(0) wins => bundled first
+    if os.path.isdir(os.path.join(_candidate, "chartthrob")) and _candidate not in sys.path:
+        sys.path.insert(0, _candidate)
 
 import gi
 
@@ -219,7 +224,7 @@ class ChartThrobPlugIn(Gimp.PlugIn):
             )
             procedure.set_menu_label(_("ChartThrob: Build Chart..."))
             procedure.set_attribution(
-                "Kevin Bjorke (original); GIMP port", "Free for use and re-use", "2026"
+                "Kevin Bjorke (original); GIMP port", "MIT License (GIMP port)", "2026"
             )
             procedure.add_menu_path("<Image>/File/Create/ChartThrob")
 
@@ -276,7 +281,7 @@ class ChartThrobPlugIn(Gimp.PlugIn):
             )
             procedure.set_menu_label(_("ChartThrob: Analyze Scan..."))
             procedure.set_attribution(
-                "Kevin Bjorke (original); GIMP port", "Free for use and re-use", "2026"
+                "Kevin Bjorke (original); GIMP port", "MIT License (GIMP port)", "2026"
             )
             procedure.add_menu_path("<Image>/Colors/ChartThrob")
 
